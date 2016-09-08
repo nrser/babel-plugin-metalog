@@ -1,117 +1,176 @@
-# Babel Plugin: Trace
+# Babel Plugin: METALOG!!
 
-This is a [Babel](https://babeljs.io/) plugin which adds a straightforward, declarative syntax for adding debug logging to JavaScript applications.
+[Babel](https://babeljs.io/) that uses labeled statements to pass call-site meta data to a global logging function. also lets you totally remove logging statements from production builds.
 
-[![Build Status](https://travis-ci.org/codemix/babel-plugin-trace.svg)](https://travis-ci.org/codemix/babel-plugin-trace)
+free context! free logging! come and get it!
 
-# What?
+based on the great work by [Charles Pick](https://github.com/phpnode) from [codemix](http://codemix.com/) on [babel-plugin-trace][].
 
-It's common to insert `console.log()` statements to help keep track of the internal state of functions when writing tricky pieces of code.
+[babel-plugin-trace]: https://github.com/codemix/babel-plugin-trace
 
-A simplified version looks like this:
+# Status
 
-```js
-// login.js
+**alpha-as-fuck**. like as in 4-5 hours work. but i couldn't find anything else that worked the way it seemed loggers should in the babel / js environment and i'm pretty happy with it so far.
 
-async function authenticate (username, password) {
-  console.log('authenticating user', username);
-  const user = await db.select().from('users').where({username: username});
-  if (!user) {
-    console.log('no such user');
-    return false;
-  }
-  else if (!user.checkPassword(password)) {
-    console.log('invalid password');
-    return false;
-  }
-  else if (!user.isActive) {
-    console.log('user is not active');
-    return false;
-  }
-  console.log('logging user', username, 'into the site');
-  return true;
-}
-```
+use with caution. like you always should when running some random dude you don't know's code.
 
-During development this is very useful, but it creates a lot of noise in the console, and when development of that particular piece of code is complete,
-the developer is likely to delete the `console.log()` calls. If we're lucky, they might leave comments in their place.
+# Motivation
 
-But this is a tragedy - that logging information is extremely useful, not only is it helpful when fixing bugs, it's a great assistance for new developers
-(including yourself, 6 months from now) when getting to know a codebase.
+1.  make **call-site meta data** (filename, class/function, line number) **automatically available** to a logging function.
+    -   logging calls automatically have context information available so you can just log the important stuff and not worry about keeping log statements in sync with file / function / class names or creating different logger instances for different contexts.
+    
+    -   i.e. **no more of this crap**:
+        
+        ```javascript
+        // src/index.js
+        
+        const logger = new Logger(__filename);
+        
+        logger.debug("i'm at the file level!");
+        // => DEBUG [src/index.js] i'm at the file level!
+        
+        function doSomething() {
+          // pain-in-the-ass and has a performance cost even if logging 
+          // is disabled: 
+          const logger = new Logger(__filename, "doSomething");
+          
+          logger.debug("i'm doing something!");
+          // => DEBUG [src/index.js:doSomething] i'm doing something!
+        }
+        ```
+        
+    -   just do this:
+        
+        ```javascript
+        // src/index.js
+        
+        debug: "i'm at the file level!";
+        // => DEBUG [src/index.js:3] i'm at the file level!
+        
+        function doSomething() {
+          debug: "i'm doing something!";
+          // => DEBUG [src/index.js:doSomething:7] i'm doing something!
+        }
+        ```
+        
+2.  pay **no performance penalty** for logging in production by completely removing logging statements during compilation.
+    -   configure the plugin in `.babelrc` to remove logging statements when `NODE_ENV=production`:
+        
+        ```JSON
+        {
+          ...
+          "plugins": [
+            ["metalog", {
+              "strip": {
+                "production": true
+              }
+            }],
+            ...
+          ],
+          ...
+        }
+        ```
+        
+    -   go crazy. log it up. everywhere. and leave them there. won't affect production performance at all.
+        
+    -   you can of course strip them out of all builds to see the difference with `{"strip": true}` in the above, and there is a bunch of functionality inherited from [babel-plugin-trace][] that should help you be more fine-grained about it, but i haven't tried it out yet (keep scrolling for details).
+        
+3.  use **any logging package** you like.
+    -   metalog just replaces `error:`, `warn:`, `info:`, `debug:` and `trace:` statements with calls to a global function. define that function and send the data to whatever logger you prefer.
+        
+    -   compiles
+        
+        ```javascript
+        // src/index.js
 
-This plugin repurposes JavaScript `LabeledStatements` to provide a logging / tracing syntax which can be selectively enabled or disabled at the folder, file, or function level at build time.
+        debug: "i'm at the file level!";
 
-When disabled in production it incurs no overhead.
-
-The syntax looks like this:
-
-```js
-// login.js
-
-async function authenticate (username, password) {
-  trace: 'authenticating user', username;
-  const user = await db.select().from('users').where({username: username});
-  if (!user) {
-    trace: 'no such user';
-    return false;
-  }
-  else if (!user.checkPassword(password)) {
-    trace: 'invalid password';
-    return false;
-  }
-  else if (!user.isActive) {
-    trace: 'user is not active';
-    return false;
-  }
-  trace: 'logging user', username, 'into the site';
-  return true;
-}
-```
-
-This will produce output like:
-
-```
-login:authenticate: authenticating user Bob
-login:authenticate:   no such user
-login:authenticate: authenticating user Alice
-login:authenticate:   invalid password
-login:authenticate: authenticating user Alice
-login:authenticate: logging user Alice into the site
-```
-
-As well as `trace:`, you can also use `log:` and `warn:`, or specify your own using the `aliases` plugin option.
-
+        function doSomething() {
+          trace: "i'm doing something!";
+        }
+        ```
+        
+        to
+        
+        ```javascript
+        "use strict";
+        
+        // src/index.js
+        
+        METALOG({
+          values: true,
+          level: "debug",
+          filename: "src/index.js",
+          filepath: "<absolute-path>/src/index.js",
+          content: ["i'm at the file level!"],
+          line: 3,
+          parentPath: []
+        });
+        
+        
+        function doSomething() {
+          METALOG({
+            values: true,
+            level: "trace",
+            filename: "src/index.js",
+            filepath: "<absolute-path>/src/index.js",
+            content: ["i'm doing something!"],
+            line: 6,
+            parentPath: ["doSomething"]
+          });
+        }
+        ```
+        
+    -   you just define `METALOG()` at global scope and handle the data in the javascript runtime however you like. pass it to your favorite logging library and filter logs using levels / hierarchy / patterns / whatever! or handle it yourself!
+        
+        a simple implementation:
+        
+        ```javascript
+        function METALOG({
+          values, // boolean, see below
+          level, // "error" | "warn" | "info" | "debug" | "trace"
+          filename, // string, filename as babel sees it
+          filepath, // string, resolved path to file
+          content, // Array<any>, the stuff that was logged
+          line, // number, line number of the call site
+          parentPath, // Array<string>, class / function ancestry
+        }) {
+          console.log(
+            `${ level } [${ filename }:${ parentPath.join(':') }:${ line }]`,
+            ...content
+          );
+        }
+        ```
+        
+    -   you can change the global function name (default `METALOG`) in the `.babelrc` plugin options:
+        
+        ```JSON
+        {
+          ...
+          "plugins": [
+            ["metalog", {
+              "strip": {
+                "production": true
+              },
+              "logFunction": "myMetalogHandler"
+            }],
+            ...
+          ],
+          ...
+        }
+        ```
+        
 # Installation
 
-Install via [npm](https://npmjs.org/package/babel-plugin-trace).
-```sh
-npm install --save-dev babel-plugin-trace
-```
-Then, in your babel configuration (usually in your `.babelrc` file), add `"trace"` to your list of plugins:
-```json
-{
-  "plugins": [["trace", {
-    "env": {
-      "production": {
-        "strip": true
-      }
-    }
-  }]]
-}
-```
+## TODO
 
-The above example configuration will remove all tracing when `NODE_ENV=production`.
+i haven't put it up on npm yet, so you need to point npm at this repo or fork/clone it and link it yourself... which you'll probably want to do because it's almost certain to have bugs and issues that you'll need to go muck around in the source to sort out. you also have to add the plugin to `.babelrc` or wherever you define your babel plugins.
 
-Alternatively, you may wish to disable tracing all of the time, and enable it for certain files or functions only.
+if this sounds confusing this package is probably way too early for your needs. if someone's actually reading this and really wants it published and doc'd open an issue and i'll try and find some time for it.
 
-To disable tracing all of the time, use this in your `.babelrc`:
-```json
-{
-  "plugins": [["trace", {
-    "strip": true
-  }]]
-}
-```
+# filtering stuff inherited from babel-plugin-trace
+
+i haven't tried any of this stuff, but i didn't go out of my way to break it either. let me know how it goes!
 
 ### Enable by filename
 Enable logging for any file with `login.js` in the path.
@@ -146,9 +205,6 @@ Log `trace` and `warn` statements.
 TRACE_LEVEL=trace,warn babel -d ./lib ./src
 ```
 
-
-
 # License
 
-Published by [codemix](http://codemix.com/) under a permissive MIT License, see [LICENSE.md](./LICENSE.md).
-
+MIT

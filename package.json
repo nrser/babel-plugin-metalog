@@ -1,7 +1,7 @@
 {
-  "name": "babel-plugin-trace",
-  "version": "1.0.0",
-  "description": "Super convenient syntax for execution tracing, logging and debugging JavaScript applications via a babel plugin.",
+  "name": "babel-plugin-metalog",
+  "version": "0.1.0",
+  "description": "Babel plugin based on Charles Pick's babel-plugin-trace that uses labeled statements to pass meta information to a global logging function.",
   "main": "lib/index.js",
   "scripts": {
     "build": "babel --plugins syntax-flow,transform-flow-strip-types -d ./lib ./src",
@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/codemix/babel-plugin-trace"
+    "url": "https://github.com/nrser/babel-plugin-metalog"
   },
   "keywords": [
     "babel",
@@ -26,12 +26,12 @@
     "debug",
     "control flow"
   ],
-  "author": "Charles Pick <charles@codemix.com>",
+  "author": "Neil Souza <neil@neilsouza.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/codemix/babel-plugin-trace/issues"
+    "url": "https://github.com/nrser/babel-plugin-metalog/issues"
   },
-  "homepage": "https://github.com/codemix/babel-plugin-trace",
+  "homepage": "https://github.com/nrser/babel-plugin-metalog",
   "devDependencies": {
     "babel-cli": "^6.1.0",
     "babel-core": "^6.1.0",
