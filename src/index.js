@@ -1,4 +1,5 @@
 import fspath from "path";
+import _ from 'lodash';
 
 type Plugin = {
   visitor: Visitors
@@ -49,26 +50,15 @@ type NodePath = {
 
 type Metadata = {
   indent: number;
-  prefix: string;
-  parentName: string;
+  parentPath: Array<string>;
   filename: string;
-  dirname: string;
-  basename: string;
-  extname: string;
+  filepath: string;
   hasStartMessage: boolean;
   isStartMessage: boolean;
+  line: number;
 };
 
-type Message = {
-  prefix: Literal;
-  indent: Literal;
-  parentName: Literal;
-  filename: Literal;
-  dirname: Literal;
-  basename: Literal;
-  extname: Literal;
-  content: Node;
-};
+type Level = "error" | "warn" | "info" | "debug" | "trace";
 
 const $handled = Symbol('handled');
 const $normalized = Symbol('normalized');
@@ -113,11 +103,12 @@ export default function ({types: t, template}: PluginParams): Plugin {
       return opts;
     }
     if (!opts.aliases) {
-      opts.aliases = {
-        log: defaultLog,
-        trace: defaultLog,
-        warn: defaultLog
-      };
+      opts.aliases = {};
+      ["error", "warn", "info", "debug", "trace"].forEach((level: Level) => {
+        opts.aliases[level] = makeNrserLog({level});
+        opts.aliases[`${ level }Values`] = makeNrserLog({level});
+        opts.aliases[`${ level }Refs`] = makeNrserLog({level, values: false});
+      });
     }
     else {
       Object.keys(opts.aliases).forEach(key => {
@@ -130,59 +121,88 @@ export default function ({types: t, template}: PluginParams): Plugin {
     opts[$normalized] = true;
     return opts;
   }
-
-  /**
-   * The default log() function.
-   */
-  function defaultLog (message: Message, metadata: Metadata): Node {
-    let prefix: string = `${metadata.context}:`;
-    if (metadata.indent) {
-      prefix += (new Array(metadata.indent + 1)).join('  ');
-    }
-    if (t.isSequenceExpression(message.content)) {
-      return t.callExpression(
-        t.memberExpression(
-          t.identifier('console'),
-          t.identifier('log')
-        ),
-        [t.stringLiteral(prefix)].concat(message.content.expressions)
-      );
-    }
-    else {
-      return expression(`console.log(prefix, content)`)({
-        prefix: t.stringLiteral(prefix),
-        content: message.content
+  
+  function makeNrserLog({
+    values = true,
+    level
+  }) {
+    return function (logFunction: string, content: Node, metadata: Metadata) {
+      return nrserLog({
+        logFunction,
+        content,
+        metadata,
+        values,
+        level,
       });
-    }
+    };
   }
-
-  function generatePrefix (dirname: string, basename: string): string {
-    if (basename !== 'index') {
-      return basename;
-    }
-    basename = fspath.basename(dirname);
-    if (basename !== 'src' && basename !== 'lib') {
-      return basename;
-    }
-
-    return fspath.basename(fspath.dirname(dirname));
+  
+  function addIdentifiers(nodes) {
+    return {
+      ...nodes,
+      ..._.fromPairs(
+        _.map(nodes, (node, key) => [`${ key }Key`, t.identifier(key)])
+      )
+    };
   }
-
+  
+  function nrserLog ({
+    logFunction,
+    content,
+    metadata,
+    values,
+    level
+  }): Node {
+    return expression(`
+      ${ logFunction }({
+        valuesKey: values,
+        levelKey: level,
+        filenameKey: filename,
+        filepathKey: filepath,
+        contentKey: content,
+        lineKey: line,
+        parentPathKey: parentPath,
+      })
+    `)(
+      addIdentifiers({
+        values: t.booleanLiteral(values),
+        level: t.stringLiteral(level),
+        filename: t.stringLiteral(metadata.filename),
+        filepath: t.stringLiteral(metadata.filepath),
+        content: t.arrayExpression(
+          t.isSequenceExpression(content) ? (
+            content.expressions
+          ) : (
+            [content]
+          )
+        ),
+        line: t.numericLiteral(metadata.line),
+        parentPath: t.arrayExpression(
+          _.map(metadata.parentPath, (str: string) => t.stringLiteral(str))
+        ),
+      })
+    )
+  }
+  
   /**
    * Collect the metadata for a given node path, which will be
    * made available to logging functions.
    */
   function collectMetadata (path: NodePath, opts: PluginOptions): Metadata {
-    const filename: string = fspath.resolve(process.cwd(), path.hub.file.opts.filename);
-    const dirname: string = fspath.dirname(filename);
-    const extname: string = fspath.extname(filename);
-    const basename: string = fspath.basename(filename, extname);
-    const prefix: string = generatePrefix(dirname, basename);
-    const names: string[] = [];
+    const filename: string = path.hub.file.opts.filename;
+    
+    const filepath: string = fspath.resolve(
+      process.cwd(),
+      path.hub.file.opts.filename
+    );
+    
+    const line: number = path.node.loc.start.line;
+    
     let indent: number = 0;
+    
     let parent: ?NodePath;
 
-    const parentName: string = path.getAncestry().slice(1).reduce((parts: string[], item: NodePath) => {
+    const parentPath: Array<string> = path.getAncestry().slice(1).reduce((parts: string[], item: NodePath) => {
       if (item.isClassMethod()) {
         if (!parent) {
           parent = item;
@@ -210,7 +230,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
         indent++;
       }
       return parts;
-    }, []).join(':');
+    }, []);
 
     let hasStartMessage: boolean = false;
     let isStartMessage: boolean = false;
@@ -233,31 +253,45 @@ export default function ({types: t, template}: PluginParams): Plugin {
         }
       }
     }
-
-    const context: string = `${prefix}:${parentName}`;
-    return {indent, prefix, parentName, context, hasStartMessage, isStartMessage, filename, dirname, basename, extname};
+    
+    return {
+      indent,
+      parentPath,
+      hasStartMessage,
+      isStartMessage,
+      filename,
+      filepath,
+      line
+    };
   }
 
 
   /**
    * Determine whether the given logging statement should be stripped.
    */
-  function shouldStrip (name: string, metadata: Metadata, opts: PluginOptions): boolean {
+  function shouldStrip (
+    name: string,
+    metadata: Metadata,
+    opts: PluginOptions
+  ): boolean {
     if (!opts.strip) {
       return false;
     }
-    else if (opts.strip === true) {
+    
+    if (
+      // strip everything
+      opts.strip === true ||
+          
+      // strip only a specific env (such as production)
+      (_.isString(opts.strip) && opts.strip === process.env.NODE_ENV) ||
+      
+      // strip this specific env
+      opts.strip[process.env.NODE_ENV] === true
+    ) {
       return !hasStripOverride(name, metadata);
     }
-    else if (typeof opts.strip === 'string') {
-      if (opts.strip === process.env.NODE_ENV) {
-        return !hasStripOverride(name, metadata);
-      }
-    }
-    else if (opts.strip[process.env.NODE_ENV]) {
-      return !hasStripOverride(name, metadata);
-    }
-    return true;
+    
+    return false;
   }
 
   function hasStripOverride (name: string, metadata: Metadata) {
@@ -284,6 +318,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
           LabeledStatement (path: NodePath): void {
             const label: NodePath = path.get('label');
             opts = normalizeOpts(opts);
+            
             if (!opts.aliases[label.node.name]) {
               return;
             }
@@ -293,6 +328,8 @@ export default function ({types: t, template}: PluginParams): Plugin {
               path.remove();
               return;
             }
+            
+            const logFunction = opts.logFunction || 'METALOG';
 
             path.traverse({
               "VariableDeclaration|Function|AssignmentExpression|UpdateExpression|YieldExpression|ReturnStatement" (item: NodePath): void {
@@ -302,19 +339,19 @@ export default function ({types: t, template}: PluginParams): Plugin {
                 if (statement.node[$handled]) {
                   return;
                 }
-                const message: Message = {
-                  prefix: t.stringLiteral(metadata.prefix),
-                  content: statement.get('expression').node,
-                  hasStartMessage: t.booleanLiteral(metadata.hasStartMessage),
-                  isStartMessage: t.booleanLiteral(metadata.isStartMessage),
-                  indent: t.numericLiteral(metadata.indent),
-                  parentName: t.stringLiteral(metadata.parentName),
-                  filename: t.stringLiteral(metadata.filename),
-                  dirname: t.stringLiteral(metadata.dirname),
-                  basename: t.stringLiteral(metadata.basename),
-                  extname: t.stringLiteral(metadata.extname)
-                };
-                const replacement = t.expressionStatement(opts.aliases[label.node.name](message, metadata));
+                // const message: Message = {
+                //   content: statement.get('expression').node,
+                //   hasStartMessage: t.booleanLiteral(metadata.hasStartMessage),
+                //   isStartMessage: t.booleanLiteral(metadata.isStartMessage),
+                //   indent: t.numericLiteral(metadata.indent),
+                //   parentName: t.stringLiteral(metadata.parentName),
+                //   filename: t.stringLiteral(metadata.filename),
+                //   filepath: t.stringLiteral(metadata.filepath),
+                // };
+                const content: Node = statement.get('expression').node;
+                const replacement = t.expressionStatement(
+                  opts.aliases[label.node.name](logFunction, content, metadata)
+                );
                 replacement[$handled] = true;
                 statement.replaceWith(replacement);
               }

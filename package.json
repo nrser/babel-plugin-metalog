@@ -10,7 +10,8 @@
     "pretest": "npm run build",
     "test": "mocha ./test/index.js",
     "test-checked": "npm run build-typed && TRACE_USE_LIBCHECKED=1 mocha ./test/index.js",
-    "watch": "NODE_WATCH=1 mocha --watch"
+    "watch": "NODE_WATCH=1 mocha --watch",
+    "build-watch": "babel --watch --plugins syntax-flow,transform-flow-strip-types -d ./lib ./src"
   },
   "repository": {
     "type": "git",
@@ -47,5 +48,8 @@
     "babel-preset-stage-1": "^6.1.0",
     "mocha": "~2.2.4",
     "should": "^6.0.1"
+  },
+  "dependencies": {
+    "lodash": "^4.15.0"
   }
 }
