@@ -11,9 +11,8 @@ type PluginParams = {
 };
 
 type PluginOptions = {
-  aliases?: {
-    [key: string]: string|Template;
-  };
+  labels?: Array<string>;
+  extraLabels?: Array<string>;
   strip?: boolean|string|{[key: string]: boolean};
 };
 
@@ -102,14 +101,20 @@ export default function ({types: t, template}: PluginParams): Plugin {
     if (opts[$normalized]) {
       return opts;
     }
-    if (!opts.aliases) {
-      opts.aliases = {};
-      ["error", "warn", "info", "debug", "trace"].forEach((level: Level) => {
-        opts.aliases[level] = makeNrserLog({level});
-        opts.aliases[`${ level }Values`] = makeNrserLog({level});
-        opts.aliases[`${ level }Refs`] = makeNrserLog({level, values: false});
-      });
+    
+    if (!opts.labels) {
+      opts.labels = ["error", "warn", "info", "debug", "trace"];
+      // .forEach((level: Level) => {
+      //   opts.aliases[level] = makeNrserLog({level});
+      //   opts.aliases[`${ level }Values`] = makeNrserLog({level});
+      //   opts.aliases[`${ level }Refs`] = makeNrserLog({level, values: false});
+      // });
     }
+    
+    if (opts.extraLabels) {
+      opts.labels = opts.labels.concat(opts.extraLabels);
+    }
+    
     else {
       Object.keys(opts.aliases).forEach(key => {
         if (typeof opts.aliases[key] === 'string' && opts.aliases[key]) {
