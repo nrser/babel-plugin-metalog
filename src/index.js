@@ -102,44 +102,18 @@ export default function ({types: t, template}: PluginParams): Plugin {
       return opts;
     }
     
+    // fill in the default handled labels if not specified
     if (!opts.labels) {
       opts.labels = ["error", "warn", "info", "debug", "trace"];
-      // .forEach((level: Level) => {
-      //   opts.aliases[level] = makeNrserLog({level});
-      //   opts.aliases[`${ level }Values`] = makeNrserLog({level});
-      //   opts.aliases[`${ level }Refs`] = makeNrserLog({level, values: false});
-      // });
     }
     
+    // add extra labels if specified
     if (opts.extraLabels) {
       opts.labels = opts.labels.concat(opts.extraLabels);
     }
     
-    else {
-      Object.keys(opts.aliases).forEach(key => {
-        if (typeof opts.aliases[key] === 'string' && opts.aliases[key]) {
-          const expr: ((message: Message) => Node) = expression(opts.aliases[key]);
-          opts.aliases[key] = (message: Message): Node => expr(message);
-        }
-      });
-    }
     opts[$normalized] = true;
     return opts;
-  }
-  
-  function makeNrserLog({
-    values = true,
-    level
-  }) {
-    return function (logFunction: string, content: Node, metadata: Metadata) {
-      return nrserLog({
-        logFunction,
-        content,
-        metadata,
-        values,
-        level,
-      });
-    };
   }
   
   function addIdentifiers(nodes) {
@@ -151,17 +125,15 @@ export default function ({types: t, template}: PluginParams): Plugin {
     };
   }
   
-  function nrserLog ({
+  function logExpression ({
     logFunction,
     content,
     metadata,
-    values,
-    level
+    label
   }): Node {
     return expression(`
       ${ logFunction }({
-        valuesKey: values,
-        levelKey: level,
+        labelKey: label,
         filenameKey: filename,
         filepathKey: filepath,
         contentKey: content,
@@ -170,8 +142,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
       })
     `)(
       addIdentifiers({
-        values: t.booleanLiteral(values),
-        level: t.stringLiteral(level),
+        label: t.stringLiteral(label),
         filename: t.stringLiteral(metadata.filename),
         filepath: t.stringLiteral(metadata.filepath),
         content: t.arrayExpression(
@@ -249,7 +220,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
           break;
         }
         const label: NodePath = child.get('label');
-        if (opts.aliases[label.node.name]) {
+        if (_.includes(opts.labels, label.node.name)) {
           hasStartMessage = true;
           if (child.node === path.node) {
             isStartMessage = true;
@@ -324,7 +295,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
             const label: NodePath = path.get('label');
             opts = normalizeOpts(opts);
             
-            if (!opts.aliases[label.node.name]) {
+            if (!_.includes(opts.labels, label.node.name)) {
               return;
             }
 
@@ -355,7 +326,12 @@ export default function ({types: t, template}: PluginParams): Plugin {
                 // };
                 const content: Node = statement.get('expression').node;
                 const replacement = t.expressionStatement(
-                  opts.aliases[label.node.name](logFunction, content, metadata)
+                  logExpression({
+                    logFunction,
+                    content,
+                    metadata,
+                    label: label.node.name
+                  })
                 );
                 replacement[$handled] = true;
                 statement.replaceWith(replacement);
