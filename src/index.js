@@ -13,7 +13,10 @@ type PluginParams = {
 type PluginOptions = {
   labels?: Array<string>;
   extraLabels?: Array<string>;
-  strip?: boolean|string|{[key: string]: boolean};
+  strip?: boolean | string | {
+    env: {[env: string]: boolean};
+    labels: {[label: string]: boolean};
+  };
 };
 
 type Visitors = {
@@ -262,7 +265,10 @@ export default function ({types: t, template}: PluginParams): Plugin {
       (_.isString(opts.strip) && opts.strip === process.env.NODE_ENV) ||
       
       // strip this specific env
-      opts.strip[process.env.NODE_ENV] === true
+      (opts.strip.env && opts.strip.env[process.env.NODE_ENV] === true) ||
+      
+      // strip this label
+      (opts.strip.labels && opts.strip.labels[name] === true)
     ) {
       return !hasStripOverride(name, metadata);
     }
