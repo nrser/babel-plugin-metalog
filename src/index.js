@@ -14,8 +14,8 @@ type PluginOptions = {
   labels?: Array<string>;
   extraLabels?: Array<string>;
   strip?: boolean | string | {
-    env: {[env: string]: boolean};
-    labels: {[label: string]: boolean};
+    env?: {[env: string]: boolean};
+    labels?: {[label: string]: boolean};
   };
 };
 
