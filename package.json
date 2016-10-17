@@ -4,7 +4,8 @@
   "description": "Babel plugin based on Charles Pick's babel-plugin-trace that uses labeled statements to pass meta information to a global logging function.",
   "main": "lib/index.js",
   "scripts": {
-    "build": "babel --plugins syntax-flow,transform-flow-strip-types -d ./lib ./src",
+    "clean": "git clean -fdX lib",
+    "build": "npm run clean && babel --plugins syntax-flow,transform-flow-strip-types -d ./lib ./src",
     "build-typed": "npm run build && babel --plugins typecheck,syntax-flow,transform-flow-strip-types -d ./lib-checked ./src",
     "prepublish": "npm run build",
     "pretest": "npm run build",
