@@ -1,6 +1,6 @@
 {
   "name": "babel-plugin-metalog",
-  "version": "0.1.1",
+  "version": "0.1.2-dev.0",
   "description": "Babel plugin based on Charles Pick's babel-plugin-trace that uses labeled statements to pass meta information to a global logging function.",
   "main": "lib/index.js",
   "scripts": {
