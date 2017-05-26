@@ -142,6 +142,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
         contentKey: content,
         lineKey: line,
         parentPathKey: parentPath,
+        bindingKey: binding,
       })
     `)(
       addIdentifiers({
@@ -159,6 +160,7 @@ export default function ({types: t, template}: PluginParams): Plugin {
         parentPath: t.arrayExpression(
           _.map(metadata.parentPath, (str: string) => t.stringLiteral(str))
         ),
+        binding: t.thisExpression(),
       })
     )
   }
