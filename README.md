@@ -46,7 +46,7 @@ use with caution. like you always should when running some random dude you don't
           doSomethingElse() {
             const logger = new Logger(
               __filename,
-              `<A name=${ this.name }>`,
+              `<Dude name=${ this.name }>`,
               'doSomethingElse'
             );
             
@@ -77,7 +77,7 @@ use with caution. like you always should when running some random dude you don't
           }
           
           __logContext() {
-            return `<A name=${ this.name }>`;
+            return `<Dude name=${ this.name }>`;
           }
           
           doSomethingElse() {
