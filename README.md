@@ -16,12 +16,12 @@ use with caution. like you always should when running some random dude you don't
 
 # Motivation
 
-1.  make **call-site meta data** (filename, class/function, line number) **automatically available** to a logging function.
+1.  make **call-site meta data** (filename, class/function, line number) as well as `this` binding **automatically available** to a logging function.
     -   logging calls automatically have context information available so you can just log the important stuff and not worry about keeping log statements in sync with file / function / class names or creating different logger instances for different contexts.
     
     -   i.e. **no more of this crap**:
         
-        ```javascript
+        ```js
         // src/index.js
         
         const logger = new Logger(__filename);
@@ -37,11 +37,30 @@ use with caution. like you always should when running some random dude you don't
           logger.debug("i'm doing something!");
           // => DEBUG [src/index.js:doSomething] i'm doing something!
         }
+        
+        class Dude {
+          constructor(name) {
+            this.name = name;
+          }
+          
+          doSomethingElse() {
+            const logger = new Logger(
+              __filename,
+              `<A name=${ this.name }>`,
+              'doSomethingElse'
+            );
+            
+            logger.debug(`I'm doing something else!`);
+          }
+        }
+        
+        (new Dude('NRSER')).doSomethingElse();
+        // => DEBUG [src/index.js:<Dude name=NRSER>:doSomethingElse] I'm doing something else!
         ```
         
     -   just do this:
         
-        ```javascript
+        ```js
         // src/index.js
         
         debug: "i'm at the file level!";
@@ -51,6 +70,23 @@ use with caution. like you always should when running some random dude you don't
           debug: "i'm doing something!";
           // => DEBUG [src/index.js:doSomething:7] i'm doing something!
         }
+        
+        class Dude {
+          constructor(name) {
+            this.name = name;
+          }
+          
+          __logContext() {
+            return `<A name=${ this.name }>`;
+          }
+          
+          doSomethingElse() {
+            debug: `I'm doing something else!`;
+          }
+        }
+        
+        (new Dude('NRSER')).doSomethingElse();
+        // => DEBUG [src/index.js:<Dude name=NRSER>:doSomethingElse] I'm doing something else!
         ```
         
 2.  pay **no performance penalty** for logging in production by completely removing logging statements during compilation.
@@ -80,7 +116,7 @@ use with caution. like you always should when running some random dude you don't
         
     -   compiles
         
-        ```javascript
+        ```js
         // src/index.js
 
         debug: "i'm at the file level!";
@@ -90,42 +126,41 @@ use with caution. like you always should when running some random dude you don't
         }
         ```
         
-        to
+    -   to
         
-        ```javascript
+        ```js
         "use strict";
         
         // src/index.js
         
         METALOG({
-          values: true,
-          level: "debug",
-          filename: "src/index.js",
-          filepath: "<absolute-path>/src/index.js",
+          label: "debug",
+          filename: "/Users/nrser/dev/gh/nrser/nrser.js/src/blah.js",
+          filepath: "/Users/nrser/dev/gh/nrser/nrser.js/src/blah.js",
           content: ["i'm at the file level!"],
-          line: 3,
-          parentPath: []
+          line: 1,
+          parentPath: [],
+          binding: undefined
         });
-        
-        
+
         function doSomething() {
           METALOG({
-            values: true,
-            level: "trace",
-            filename: "src/index.js",
-            filepath: "<absolute-path>/src/index.js",
+            label: "trace",
+            filename: "/Users/nrser/dev/gh/nrser/nrser.js/src/blah.js",
+            filepath: "/Users/nrser/dev/gh/nrser/nrser.js/src/blah.js",
             content: ["i'm doing something!"],
-            line: 6,
-            parentPath: ["doSomething"]
+            line: 4,
+            parentPath: ["doSomething"],
+            binding: this
           });
         }
         ```
         
     -   you just define `METALOG()` at global scope and handle the data in the javascript runtime however you like. pass it to your favorite logging library and filter logs using levels / hierarchy / patterns / whatever! or handle it yourself!
         
-        a simple implementation:
+        a simple implementation (doesn't deal with `binding`):
         
-        ```javascript
+        ```js
         function METALOG({
           values, // boolean, see below
           level, // "error" | "warn" | "info" | "debug" | "trace"
@@ -134,6 +169,7 @@ use with caution. like you always should when running some random dude you don't
           content, // Array<any>, the stuff that was logged
           line, // number, line number of the call site
           parentPath, // Array<string>, class / function ancestry
+          binding, // `this` in current scope, undefined at file-level
         }) {
           console.log(
             `${ level } [${ filename }:${ parentPath.join(':') }:${ line }]`,
