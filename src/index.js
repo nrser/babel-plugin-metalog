@@ -146,6 +146,11 @@ export default function ({types: t, template}: PluginParams): Plugin {
       })
     `)(
       addIdentifiers({
+        // TODO When was this change made? What was I doing? Why? We don't know!
+        //      
+        //      Comment your code, commit your code people. Sheesh. I'm the 
+        //      worst.
+        [logFunction]: t.Identifier(logFunction),
         label: t.stringLiteral(label),
         filename: t.stringLiteral(metadata.filename),
         filepath: t.stringLiteral(metadata.filepath),
